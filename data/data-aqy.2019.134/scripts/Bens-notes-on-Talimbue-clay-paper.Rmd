@@ -1,0 +1,366 @@
+---
+title: "Notes on 'Patterned and Plain Baked Clay in Pre-Pottery Contexts from Southeast Sulawesi, Indonesia' by Bulbeck et al."
+author: "Ben Marwick"
+date: "20 May 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, 
+                      warning = FALSE, 
+                      message = FALSE,
+                      cache = TRUE)
+```
+
+# Introduction
+
+In these notes I work through the paper to ensure I understand what is going on. I recompute some of the values, offer some observations where the ms. needs to be changed, and proposed some figures that we can add to the ms. 
+
+# Data and Code
+
+I would like to deposit our spreadsheets and my R code (i.e. something like this document) on a publicly accessible trustworty data repository. I have created a repository for this paper here: <http://doi.org/0.17605/OSF.IO/QF83X> and added mentions to it in the paper. There's nothing there yet, but I hope you will agree that this is worth to do. If we agree, I will upload the files at the same time that we submit to the journal. 
+
+## Radiocarbon ages
+
+I used the table of C14 ages in the ms. and calibrated them using the R pkg Bchron (IntCal13 curve).
+
+```{r c14-read-in}
+# read in data
+library(here)
+
+t_ages <- readxl::read_excel(here("data/data-aqy.2019.134/data/Talimbue_radiocarbon_ages.xlsx"))
+
+# clean columns 
+suppressPackageStartupMessages(library(tidyverse))
+t_ages_clean <- 
+t_ages %>% 
+  mutate(Depth = if_else(str_detect(Depth, "cm"),
+                         parse_number(Depth) / 100,
+                         parse_number(Depth))) %>% 
+  mutate(`Date (BP)` = str_remove_all(`Date (BP)`, ",")) %>% 
+  separate(`Date (BP)`, into = c("age", "error")) %>% 
+  mutate_at(vars(age, error), as.numeric)
+```
+
+Here is the calibration code:
+
+```{r c14-calibrate, results='hide'}
+# calibrate ages and plot
+library(Bchron)
+
+t_ages_clean_calibrated <- 
+BchronCalibrate(t_ages_clean$age,
+                t_ages_clean$error,
+                calCurves = rep('intcal13', 
+                                length(t_ages_clean$age)),
+                positions = t_ages_clean$Depth)
+```
+
+I then fit a non-parametric chronology model to age/depth data according to the Compound Poisson-Gamma model defined by Haslett and Parnell (2008) <DOI:10.1111/j.1467-9876.2008.00623.x>
+
+```{r c14-model, results='hide'}
+t_out  = Bchronology(t_ages_clean$age,
+                      t_ages_clean$error,
+                      calCurves = rep('intcal13', 
+                                      length(t_ages_clean$age)),
+                      positions = t_ages_clean$Depth,
+                     )
+```
+
+Here is the plot showing the interpolated ages:
+
+```{r}
+# plot with age-position 
+plot(t_out,
+     main="Talimbue Square B",
+     xlab='Age (cal years BP)',
+     ylab='Depth (m)',
+     las=1, 
+     dateHeight = 0.2,
+     legLoc = "topright", 
+     xlim = c(0, 20000))
+```
+
+I edited the plot by hand slightly to show the periods of rapid sedimentation, this is good because it clearly shows the uncertainties in our age-depth model
+
+Using the chronology model computed above, I can predict ages for any depth in the site. We can use this to assign ages to the spits.  
+
+```{r c14-predict, results='hide'}
+# predict ages for a given depth
+predictAges = predict(t_out, 
+                      newPositions = seq(0,
+                                         max(t_ages_clean$Depth),
+                                         by=0.001))
+
+predictAges_means <- colMeans(predictAges)
+
+predictAges_means_df <- 
+predictAges_means %>% 
+  as_data_frame()  %>% 
+  mutate(depth = as.numeric(str_remove(names(predictAges_means), "Pos"))) %>% 
+  rename(age = value) 
+```
+
+
+## Spit depths and ages
+
+I entered the spit depths from the recording sheets into an Excel file. I just used the depths recorded from the centre of the excavation square. For the lower depths that were not measured accurately I estimated a 0.05 m spit.  
+
+```{r spit-depths}
+# Square # depths for spits
+t_sq_depths <- readxl::read_excel(here("data/data-aqy.2019.134/data/Spit depths from spit sheets.xlsx"))
+
+knitr::kable(t_sq_depths)
+```
+
+# Densities of artefact and ecofact classes at Gua Talimbue Square B
+
+We can plot this by depth or by age. Both are preferable to by Spit, because Spits are not 'real', for some peer-reviwers, at least.
+
+```{r talimbue-sq-b-artefact-plot, fig.width=4, fig.show='hold'}
+# Square B artefact densities (n/kg sediment)
+t_arts_sq_B <- readxl::read_excel(here("data/data-aqy.2019.134/data/Talimbue_weights_analysis.xlsx"), sheet = "Talimbue_B_densities")
+
+# Square # depths for spits
+t_sq_depths <- readxl::read_excel(here("data/data-aqy.2019.134/data/Spit depths from spit sheets.xlsx"))
+
+# join sq B
+t_arts_sq_B_join <- 
+  t_arts_sq_B %>% 
+  left_join(t_sq_depths,  # get depths for spits
+            by = c("Spit" = "spit")) %>% 
+  # need 3 digits to match for the join
+  mutate(sq_b_cumul_depth_below_surface = round(sq_b_cumul_depth_below_surface, 3)) %>% 
+  left_join(predictAges_means_df,  # get ages for depths
+            by = c("sq_b_cumul_depth_below_surface" = "depth"))
+
+write_csv(t_arts_sq_B_join,
+          here("data/data-aqy.2019.134/data/t_arts_sq_B_join.csv"))
+
+# plot by depth 
+t_arts_sq_B_join %>% 
+  select(-Spit, 
+         -SQB_center_end_level, 
+         -SQE_center_end_level, 
+         -age, 
+         -sq_e_cumul_depth_below_surface) %>% 
+  gather(material, density, -sq_b_cumul_depth_below_surface) %>% 
+  ggplot(aes(sq_b_cumul_depth_below_surface, 
+             density)) +
+  geom_line() +
+  ylab("Density (g/kg sediment)") +
+  xlab("Depth (m)") +
+  facet_wrap( ~ material, scales = "free_y", ncol = 1) +
+  theme_minimal()
+
+# plot by age 
+t_arts_sq_B_join %>% 
+  select(-Spit, 
+         -SQB_center_end_level, 
+         -SQE_center_end_level, 
+         -sq_e_cumul_depth_below_surface,
+         -sq_b_cumul_depth_below_surface) %>% 
+  gather(material, density, -age) %>% 
+  ggplot(aes(age/1000, 
+             density)) +
+  geom_line() +
+  ylab("Density (g/kg sediment)") +
+  xlab("Age cal BP (x 1000)") +
+  facet_wrap( ~ material, scales = "free_y", ncol = 1) +
+  theme_minimal()
+
+```
+
+# Densities of artefact and ecofact classes at Gua Talimbue Square E.
+
+I think we should use the density-age plots for the paper. 
+
+```{r talimbue-sq-e-artefact-plot, fig.width=4, fig.show='hold'}
+# Square E artefact densities (n/kg sediment)
+t_arts_sq_E <- readxl::read_excel(here("data/data-aqy.2019.134/data/Talimbue_weights_analysis.xlsx"), sheet = "Talimbue_E_densities")
+
+# join sq E
+t_arts_sq_E_join <- 
+  t_arts_sq_E %>% 
+  left_join(t_sq_depths,  # get depths for spits
+            by = c("Spit" = "spit")) %>% 
+  # need 3 digits to match for the join
+  mutate(sq_e_cumul_depth_below_surface = round(sq_e_cumul_depth_below_surface, 3)) %>% 
+  left_join(predictAges_means_df,  # get ages for depths
+            by = c("sq_e_cumul_depth_below_surface" = "depth"))
+
+
+# plot densities by depth
+t_arts_sq_E_join %>% 
+  select(-Spit, 
+         -SQB_center_end_level, 
+         -SQE_center_end_level, 
+         -age, 
+         -sq_b_cumul_depth_below_surface) %>% 
+  gather(material, density, -sq_e_cumul_depth_below_surface) %>% 
+  ggplot(aes(sq_e_cumul_depth_below_surface, 
+             density)) +
+  geom_line() +
+  ylab("Density (g/kg sediment)") +
+  xlab("Depth (m)") +
+  facet_wrap( ~ material, scales = "free_y", ncol = 1) +
+  theme_minimal()
+
+# plot densities by age
+t_arts_sq_E_join %>% 
+  select(-Spit, 
+         -SQB_center_end_level, 
+         -SQE_center_end_level, 
+         -sq_e_cumul_depth_below_surface,
+         -sq_b_cumul_depth_below_surface) %>% 
+  gather(material, density, -age) %>% 
+ggplot(aes(age, 
+           density)) +
+  geom_line() +
+  ylab("Density (g/kg sediment)") +
+  xlab("Age cal BP (x 1000)") +
+  facet_wrap( ~ material, scales = "free_y", ncol = 1) +
+  theme_minimal()
+```
+
+
+
+# Correlation analysis of the Holocene artefact and ecofact densities (gm/kg of excavated sediment) from Gua Talimbue squares B and E
+
+To check Table 2 in the ms. I explored some correlation and regression analyses. The plot below shows the Pearson's correlation coefficient values, they match what we see in the table. 
+
+```{r}
+Densities_for_regress_analysis <- readxl::read_excel("../data/Talimbue_weights_analysis.xlsx", 
+                  sheet = "Densities_for_regress_analysis")
+
+d <- Densities_for_regress_analysis %>% 
+  select(Lithics, 
+         Shellfish, 
+         Vertebrate, 
+         Plant, 
+         Baked_clay, 
+         Pottery)
+
+# check the distributions of all pairs of variables. 
+library(GGally)
+ggpairs(d, progress = FALSE)
+```
+
+However, the plot above indicates that many of these variables are highly right-skewed. So we should use the more robust Spearman method for computing correlations, not Pearson:
+
+```{r}
+# should use spearman
+library(corrr)
+d %>% 
+  correlate(method = "spearman") %>% 
+  knitr::kable()
+```
+
+We can get p-values for the correlations, and we see that about half of them do not return significant correlations. This is contrary to the table in the ms. I think the problem is that we have different methods to compute the t-statistic. 
+
+The t-statistic values I get here are quite different from in the ms. In the `Talimbue_weights_analysis.xlsx` spreadsheet, on sheet `Regression_analysis`, I see that you are computing the t-statistic using a formula like this `=D20*(139/(1-D20^2))` where `D20` is the cell with the *r* value, which we can write as
+
+$$\frac {r(n-2)}{1-r^2}$$
+
+. However, the [correct formula](https://onlinecourses.science.psu.edu/stat414/node/254/) for this is
+
+$$\frac {r\sqrt{n-2}}{\sqrt{1-r^2}}$$
+
+which in Excel, will look like `=(D20*SQRT(139))/SQRT(1-D20^2)`
+
+What do you think? Do you have a source to confirm your method for computing the t-statistic? If it is wrote, we'll need to redo some tables and edit the text a bit more. 
+
+Here is Pearson's correlation, with p-values:
+
+```{r}
+# cor.test with p-values 
+
+var_pairs <- t(combn(names(d), 2)) %>%
+  as_data_frame() %>% 
+  setNames(c("x", "y"))
+
+cor_test <- 
+var_pairs %>% 
+  dplyr::mutate(r.test = purrr::map2(x, y, 
+                   ~ stats::cor.test(d[[.x]],
+                                     d[[.y]], 
+                                    method ="pearson")),
+                r.test = purrr::map(r.test, broom::tidy)) %>%
+  tidyr::unnest(r.test) %>% 
+  select(-method, -alternative) %>% 
+  mutate_if(is.numeric, round, 3) %>% 
+  arrange(p.value)
+
+knitr::kable(cor_test)
+```
+
+And here is Spearman, which I think is better for these data: 
+
+```{r}
+# cor.test with p-values 
+
+var_pairs <- t(combn(names(d), 2)) %>%
+  as_data_frame() %>% 
+  setNames(c("x", "y"))
+
+cor_test <- 
+var_pairs %>% 
+  dplyr::mutate(r.test = purrr::map2(x, y, 
+                   ~ stats::cor.test(d[[.x]],
+                                     d[[.y]], 
+                                    method ="spearman")),
+                r.test = purrr::map(r.test, broom::tidy)) %>%
+  tidyr::unnest(r.test) %>% 
+  select(-method, -alternative) %>% 
+  mutate_if(is.numeric, round, 3) %>% 
+  arrange(p.value)
+
+knitr::kable(cor_test)
+```
+
+Let's also look at linear regressions for each pair of variables. We see only four of these combinations have significant relationships.
+
+```{r}
+# check linear models
+list_of_models <- 
+combn(names(d), 
+      2, 
+      function(x){lm(d[, x])}, simplify = FALSE)
+
+vars <- combn(names(d), 2)
+names(list_of_models) <- vars[1 , ]
+
+table_of_lm_output <- 
+map_dfr(list_of_models, broom::glance) %>% 
+  mutate(var1 = vars[1, ]) %>% 
+  mutate(var2 = vars[2, ]) %>% 
+  select(var1, var2, everything()) %>% 
+  mutate_if(is.numeric, round, 3)  %>% 
+  arrange(p.value)
+
+knitr::kable(table_of_lm_output)
+```
+
+
+# Vertical distribution of Gua Talimbue patterned baked-clay fragments.
+
+I took the data in table 3 of the ms. and made this plot. It is very clear to see that curvilinear patterns are more typical of the I think this plot is much more effective at showing the trends that the table, and should replace the table. 
+
+```{r fig.width=6}
+t_vert_dist <- readxl::read_excel("../data/Talimbue_vertical_distribution_Gua_Talimbue_patterned_baked_clay_fragments.xlsx")
+
+t_vert_dist %>% 
+  mutate(Spits = str_glue('Spits {Spits}\n{age}')) %>% 
+  select(Spits, ends_with("N")) %>% 
+  gather(variable, value, -Spits) %>% 
+  mutate(variable = str_remove_all(str_trim(variable),  "N")) %>% 
+  ggplot(aes(Spits, 
+             value)) +
+  geom_col() +
+  facet_wrap( ~ variable, ncol = 1, scales = "free_y") +
+  theme_minimal() +
+  ylab("Number of fragments") +
+  xlab("Depositional phase")
+
+```
+

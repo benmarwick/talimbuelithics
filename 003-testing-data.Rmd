@@ -1,0 +1,209 @@
+---
+title: "Analying Talimbue Data"
+output: 
+  bookdown::html_document2:
+    number_sections: false
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,
+                      warning = FALSE,
+                      message = FALSE)
+```
+
+```{r}
+library(tidyverse)
+library(kableExtra)
+
+source("001-prepare-data.R")
+source("002-clean-data.R")
+db_data_retouch_subset <- 
+  db_data_retouch %>% 
+  filter(Material %in% c("Chert"))
+
+bm_data_complete_flakes_all_tally <- 
+  bm_data_complete_flakes_all %>% 
+  group_by('Raw Material') %>% 
+  tally() %>% 
+  arrange(desc(n))
+
+bm_data_complete_flakes_all_tally %>% 
+  kbl(caption = "Material Type") %>% 
+  kable_classic(full_width=FALSE)
+```       
+
+```{r}
+# looking into retouch
+library(GGally)
+library(ggbeeswarm)
+
+hist(as.numeric(bm_data_retouch$`Platform Width`))
+
+hist(bm_data_counts$`Retouched piece`)
+
+hist(db_data_retouch$`Maksimal Length( mm)`)
+
+ggplot(db_data_retouch_subset) +
+  aes(Spit, 
+      `Maksimal Length( mm)`) +
+  geom_boxplot()+
+  geom_quasirandom(alpha = .85)
+
+# change in frequency of retouch over time
+
+# by spit
+ggplot(bm_data_counts) +
+  aes(Spit, 
+      `Retouched piece`
+      ) +
+  geom_col() +
+  theme_minimal()
+
+# by depositional phase
+tb_retouch %>% 
+  filter(Material == "Chert") %>% 
+  group_by(depositional_phase) %>% 
+  tally() +
+  theme_minimal()
+```
+
+
+```{r}
+
+# dep phase by flake mass by depositional unit
+ggplot(tb_complete_flakes_clean) +
+  aes(depositional_phase, 
+      `Weight (Gram)`) +
+  geom_boxplot()+
+  geom_quasirandom(alpha = .85) +
+  scale_y_log10()
+
+aov( `Weight (Gram)`  ~ depositional_phase, 
+     data =  tb_complete_flakes_clean %>% 
+       filter(depositional_phase != "no_phase")) %>% 
+  summary()
+
+#  dep phase by Oriented Thick (mm)
+ggplot(tb_complete_flakes_clean) +
+  aes(depositional_phase, 
+      `Oriented Thick (mm)`) +
+  geom_boxplot()+
+  geom_quasirandom(alpha = .85) +
+  scale_y_log10()
+
+aov( `Oriented Thick (mm)`  ~ depositional_phase, 
+     data =  tb_complete_flakes_clean %>% 
+       filter(depositional_phase != "no_phase")) %>% 
+  summary()
+
+# dep phase by termination
+ggplot(tb_complete_flakes_clean) +
+  aes(depositional_phase, 
+     fill =  Termination) +
+  geom_bar(position = "fill")  
+
+# pca_grouping by flake mass by depositional unit
+ggplot(tb_complete_flakes_clean) +
+  aes(pca_group, 
+      `Weight (Gram)`) +
+  geom_boxplot()+
+  geom_quasirandom(alpha = .85) +
+  scale_y_log10()
+
+aov( `Weight (Gram)` ~ pca_group, 
+     data =  tb_complete_flakes_clean %>% 
+       filter(depositional_phase != "no_phase")) %>% 
+  summary()
+
+# pca_grouping by  Oriented Thick (mm)
+ggplot(tb_complete_flakes_clean) +
+  aes(pca_group, 
+      `Oriented Thick (mm)`) +
+  geom_boxplot()+
+  geom_quasirandom(alpha = .85) +
+  scale_y_log10()
+
+aov( `Oriented Thick (mm)`  ~ pca_group, 
+     data =  tb_complete_flakes_clean %>% 
+       filter(depositional_phase != "no_phase")) %>% 
+  summary()
+
+# pca by termination
+ggplot(tb_complete_flakes_clean) +
+  aes(pca_group, 
+     fill =  Termination) +
+  geom_bar(position = "fill")  
+
+```
+
+Looking at the correlations between the variables in BM's Data Counts
+```{r}
+library(FactoMineR)
+
+ggpairs(bm_data_counts,
+        lower = list(continuous = wrap("smooth")))
+```
+
+The Scatterplot matrix shows several correlated variables and some clusters. Will attempt a PCA to better understand the structure of this data set.
+
+```{r}
+res_pca <- PCA(bm_data_counts %>% 
+                 select(-Spit, 
+                        -Total,
+                        -`Non-artefact`,
+                        -`Unidentified/questions`),
+               graph = FALSE)
+
+library(factoextra)
+fviz_screeplot(res_pca)
+```
+
+Figure 1: Visualzation of Eigenvalues
+
+Figure 1 is a visulatizaton of our Eigenvalues. We can see that dimensions 1 and 2 are contributing the most to the variability.
+
+```{r}
+fviz_contrib(res_pca,
+             choice = "var",
+             axes = 1,
+             top = 10)
+
+fviz_contrib(res_pca,
+             choice = "var",
+             axes = 2,
+             top = 10)
+```
+Broken Flakes, Complete Flakes, and Cores are contributing the most to the variability of this data set. Retouched pieces makes up a minimal amount of variability.
+
+```{r}
+res_pca$var$coord %>% 
+  as.data.frame() %>% 
+  rownames_to_column(var = "variable") %>% 
+  as_tibble() %>% 
+  pivot_longer(-variable,
+               names_to = "Dims",
+               values_to = "values") %>% 
+  ggplot()+
+  aes(values,
+      variable,
+      fill = variable)+
+  geom_col(show.legend = FALSE) +
+  facet_wrap( ~ Dims) +
+  labs(y=NULL) +
+  theme_minimal()
+```
+Figure 3: Contributions to variables to each dimension
+
+Figure 3 shows each contribution of our variables that go into each dimension. Retouched pieces have a positive contributions for Dimensions 2 and 3.
+
+```{r}
+fviz_pca_var(res_pca,
+             repel = TRUE)
+```
+Figure 5: PCA for each Variable
+
+```{r}
+fviz_pca_biplot(res_pca,
+                repel = TRUE)
+```
+

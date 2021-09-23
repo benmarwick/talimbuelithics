@@ -56,6 +56,7 @@ db_data_retouch <-
 tb_complete_flakes <-
 full_join(db_data_complete_flakes_51_down_other,
           db_data_complete_flakes_spits_31_50_all) %>%
+full_join(db_data_complete_flakes_51_down_retouch) %>%
 full_join(bm_data_complete_flakes_all %>%
               mutate(Specimen = as.character(Specimen),
                      `% Cortex (increments of 10%)` = as.character(`% Cortex (increments of 10%)`)),

@@ -56,7 +56,7 @@ tb_complete_flakes_clean %>%
 
 # from BM's notes: RC = red chert, BC = brown chert, BKC = black chert, GRC = green chert.
 
-# fix some of the spelling mistaked
+# fix some of the spelling mistakes
 tb_complete_flakes_clean <-
   tb_complete_flakes_clean %>%
   mutate(Material = case_when(
@@ -68,6 +68,10 @@ tb_complete_flakes_clean <-
     Material == "YC" ~ "Chert",
     Material == "GC&YC" ~ "Chert",
     Material == "QZ" ~ "Quartz",
+    Material == "OT" ~ "Other",
+    Material == "SD" ~ "Other",
+    Material == "Andesit" ~ "Andesite",
+    is.na(Material)  ~ "Other",
     TRUE ~ Material))
 
 # take a look yet again to see the improvement...
@@ -109,17 +113,23 @@ tb_complete_flakes_clean %>%
 # put them into similar categories
 tb_complete_flakes_clean <-
   tb_complete_flakes_clean %>%
-  mutate(`Cortex Persentation`  = case_when(
+  mutate(`Cortex amount`  = case_when(
     `Cortex Persentation` == 0   ~ "None",
     `Cortex Persentation` %in% c(0.1, 0.2, 10:25)  ~ "1-25%",
     `Cortex Persentation` %in% c(0.3, 0.4, 0.5, 30:50)  ~ "26-50%",
-    `Cortex Persentation` %in% c(0.6, 0.7, 0.8, 60:80)  ~ "51-75%",
-    `Cortex Persentation` %in% c(0.9, 1, 90:100)  ~ "100%",
-    TRUE ~ `Cortex Persentation`))
+    `Cortex Persentation` %in% c(0.6, 0.7, 0.8, 60:80)  ~ "51-80%",
+    `Cortex Persentation` %in% c(0.9, 1, 90:100)  ~ "90-100%",
+    TRUE ~ `Cortex Persentation`)) %>%
+  mutate(`Cortex amount` = factor(`Cortex amount`,
+                                  levels = c("None",
+                                             "1-25%",
+                                             "26-50%",
+                                             "51-75%",
+                                             "90-100%")))
 
 # take a look yet again to see the improvement...
 tb_complete_flakes_clean %>%
-  group_by(`Cortex Persentation`) %>%
+  group_by(`Cortex amount`) %>%
   tally(sort = TRUE) # looks good!
 
 #----------------------------------------------------
@@ -172,7 +182,7 @@ tb_cores %>%
 tb_complete_flakes_clean <-
   tb_complete_flakes_clean %>%
   mutate(pca_group = case_when(
-    Spit %in% c(1, 2, 5, 6, 7, 8, 9, 10) ~ "pca_1",
+    Spit %in% c(1, 2, 5, 6, 7, 8, 9, 10, 11) ~ "pca_1",
     Spit %in% c(3, 17, 18, 20, 22, 23) ~ "pca_2",
     TRUE ~ "no_pca_group"
   ))

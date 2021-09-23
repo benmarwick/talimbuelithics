@@ -36,3 +36,9 @@ ggplot(retouch_giur_per_artefact) +
   geom_smooth(aes(Spit,
                   mean_giur)) +
   theme_minimal()
+
+# GIUR by depositional_phase
+ggplot(retouch_giur_per_artefact) +
+  geom_boxplot( aes(as.factor(depositional_phase),
+                    mean_giur)) +
+  theme_minimal()

@@ -96,7 +96,7 @@ predictAges_means <- colMeans(predictAges)
 
 predictAges_means_df <- 
 predictAges_means %>% 
-  as_data_frame()  %>% 
+  as_tibble()  %>% 
   mutate(depth = as.numeric(str_remove(names(predictAges_means), "Pos"))) %>% 
   rename(age = value) 
 ```
@@ -222,8 +222,6 @@ ggplot(aes(age,
   facet_wrap( ~ material, scales = "free_y", ncol = 1) +
   theme_minimal()
 ```
-
-
 
 # Correlation analysis of the Holocene artefact and ecofact densities (gm/kg of excavated sediment) from Gua Talimbue squares B and E
 
@@ -363,4 +361,242 @@ t_vert_dist %>%
   xlab("Depositional phase")
 
 ```
+
+# Dividing the lithic sequence up for rate of evolution analysis
+
+I want to divide the lithic sequence into phases to analyse the rate of evolutionary change in each phase. In our paper we have three depositional events (https://www.cambridge.org/core/journals/antiquity/article/patterned-and-plain-baked-clay-from-prepottery-contexts-in-southeast-sulawesi-indonesia/3BED60E9EE9427143D23004361599427):  4100-4500, 6500-7500, 9500-9900 Here's how they look on the density plot: 
+
+
+```{r}
+write_csv(t_arts_sq_B_join, 
+          here::here("data/data-aqy.2019.134/data/t_arts_sq_B_join.csv"))
+
+
+
+# plot find densities by age 
+t_arts_sq_B_join %>% 
+  select(-Spit, 
+         -SQB_center_end_level, 
+         -SQE_center_end_level, 
+         -sq_e_cumul_depth_below_surface,
+         -sq_b_cumul_depth_below_surface) %>% 
+  gather(material, density, -age) %>% 
+  ggplot(aes(age/1000, 
+             density)) +
+  geom_line() +
+  ylab("Density (g/kg sediment)") +
+  xlab("Age cal BP (x 1000)") +
+  facet_wrap( ~ material, scales = "free_y", ncol = 1) +
+  theme_minimal() +
+  annotate("rect",
+           alpha = 0.3,
+           xmin = 4100/1000,
+           xmax = 4500/1000,
+           ymin = -Inf,
+           ymax = Inf)  +
+  annotate("rect",
+           alpha = 0.3,
+           xmin = 6500/1000,
+           xmax = 7500/1000,
+           ymin = -Inf,
+           ymax = Inf)  +
+  annotate("rect",
+           alpha = 0.3,
+           xmin = 9500/1000,
+           xmax = 9900/1000,
+           ymin = -Inf,
+           ymax = Inf)
+```
+
+```{r}
+# get individual artefact data
+library(tidyverse)
+
+t_arts_sq_B_join <- read_csv(here::here("data/data-aqy.2019.134/data/t_arts_sq_B_join.csv"))
+
+source("001-prepare-data.R")
+source("002-clean-data.R")
+
+# Let's join the individual artefact data to the individual spit ages from 
+# the age calculations above
+tb_complete_flakes_clean_ages <- 
+tb_complete_flakes_clean %>% 
+  left_join(t_arts_sq_B_join)
+
+# explore the counts of artefacts in each phase and time step
+
+time_step <- 300
+
+phase_3_for_rates <- c(4000, 6200)
+phase_2_for_rates <- c(6400, 8300)
+phase_1_for_rates <- c(8400, 12000)
+
+dep_phase_3_count <- 
+tb_complete_flakes_clean_ages %>% 
+  filter(between(age, !!!phase_3_for_rates)) %>% 
+  mutate(age_interval = floor(age/time_step)*time_step) %>% 
+  select(Spit, age, age_interval) %>% 
+  count(age_interval)
+
+dep_phase_2_count <- 
+tb_complete_flakes_clean_ages %>% 
+  filter(between(age, !!!phase_2_for_rates)) %>% 
+  mutate(age_interval = floor(age/time_step)*time_step) %>% 
+  select(Spit, age, age_interval) %>% 
+  count(age_interval)
+
+dep_phase_1_count <- 
+tb_complete_flakes_clean_ages %>% 
+  filter(between(age, !!!phase_1_for_rates)) %>% 
+  mutate(age_interval = floor(age/time_step)*time_step) %>% 
+  select(Spit, age, age_interval) %>% 
+  count(age_interval)
+
+# prepare the artefact data for rate analysis
+
+basic_measurement_cols <- 
+  c("Oriented Length (mm)",
+    "Oriented Width (mm)" ,
+    "Oriented Thick (mm)" ,
+    "Weight (Gram)",
+    "age",
+    "age_interval")
+
+dep_phase_3_artefacts <- 
+tb_complete_flakes_clean_ages %>% 
+  filter(between(age, !!!phase_3_for_rates)) %>% 
+  mutate(age_interval = floor(age/time_step)*time_step) %>% 
+  select(all_of(basic_measurement_cols))
+  
+dep_phase_2_artefacts <- 
+tb_complete_flakes_clean_ages %>% 
+  filter(between(age, !!!phase_2_for_rates)) %>% 
+  mutate(age_interval = floor(age/time_step)*time_step) %>% 
+  select(all_of(basic_measurement_cols))
+
+dep_phase_1_artefacts <- 
+tb_complete_flakes_clean_ages %>% 
+  filter(between(age, !!!phase_1_for_rates)) %>% 
+  mutate(age_interval = floor(age/time_step)*time_step) %>% 
+  select(all_of(basic_measurement_cols))
+
+```
+
+Here's how these slightly larger phases look:
+
+```{r}
+
+# plot find densities by age 
+t_arts_sq_B_join %>% 
+  select(-Spit, 
+         -SQB_center_end_level, 
+         -SQE_center_end_level, 
+         -sq_e_cumul_depth_below_surface,
+         -sq_b_cumul_depth_below_surface) %>% 
+  gather(material, 
+         density, 
+         -age) %>% 
+  filter(material == "Lithics") %>% 
+  ggplot(aes(age/1000, 
+             density)) +
+  geom_line() +
+  ylab("Density (g/kg sediment)") +
+  xlab("Age cal BP (x 1000)") +
+  facet_wrap( ~ material, scales = "free_y", ncol = 1) +
+  theme_minimal() +
+  annotate("rect",
+           alpha = 0.3,
+           xmin = phase_3_for_rates[1]/1000,
+           xmax = phase_3_for_rates[2]/1000,
+           ymin = -Inf,
+           ymax = Inf)  +
+  annotate("rect",
+           alpha = 0.3,
+           xmin = phase_2_for_rates[1]/1000,
+           xmax = phase_2_for_rates[2]/1000,
+           ymin = -Inf,
+           ymax = Inf)  +
+  annotate("rect",
+           alpha = 0.3,
+           xmin = phase_1_for_rates[1]/1000,
+           xmax = phase_1_for_rates[2]/1000,
+           ymin = -Inf,
+           ymax = Inf)
+```
+
+Lets try it with roev
+
+```{r}
+dep_phase_3_artefacts_summary <- 
+dep_phase_3_artefacts %>% 
+  group_by(age_interval) %>% 
+  summarise(mean_ol = mean(`Weight (Gram)`),
+              sd_ol = sd(`Weight (Gram)`),
+                  n = n())
+
+dep_phase_2_artefacts_summary <- 
+dep_phase_2_artefacts %>% 
+  group_by(age_interval) %>% 
+  summarise(mean_ol = mean(`Weight (Gram)`),
+              sd_ol = sd(`Weight (Gram)`),
+                  n = n())
+
+dep_phase_1_artefacts_summary <- 
+dep_phase_1_artefacts %>% 
+  group_by(age_interval) %>% 
+  summarise(mean_ol = mean(`Weight (Gram)`),
+              sd_ol = sd(`Weight (Gram)`),
+                  n = n())
+
+idrx3 <- roev::DataPrep(dep_phase_3_artefacts_summary)
+idrx2 <- roev::DataPrep(dep_phase_2_artefacts_summary)
+idrx1 <- roev::DataPrep(dep_phase_1_artefacts_summary)
+idrx1 <- apply(idrx1, 2, jitter, amount = 0.01)
+
+```
+
+
+```{r fig.width=8, fig.height=8}
+
+xr <- c(-20, 20)
+yr <- c(-2, 8)
+
+plot(xr,   # set up plot 
+     yr,	 # some trial and error required here		
+     type = 'n',
+     xaxt = 'n',
+     yaxt = 'n',
+     axes = FALSE,
+     ann = FALSE,
+     asp = 1) 		# aspect ratio (y/x))
+
+bootresultd1 = roev::TriPanelBC(idrx1,     # idrx matrix
+                               "r",       # mode (diff/rate)
+                               -15,        # panel placement coordinate x
+                               3,         # panel placement coordinate y
+                               1000,      # number of bootstrap replications
+                               "all",     # 'mode' as "medians","all","mixed"
+                               2,         # circle size for points (1.5 or 2)
+                               "normal")  # 'equation' position 
+
+bootresultd2 = roev::TriPanelBC(idrx2,     # idrx matrix
+                               "r",       # mode (diff/rate)
+                               -3,        # panel placement coordinate x
+                               3,         # panel placement coordinate y
+                               1000,      # number of bootstrap replications
+                               "all",     # 'mode' as "medians","all","mixed"
+                               2,         # circle size for points (1.5 or 2)
+                               "normal")  # 'equation' position
+
+bootresultd3 = roev::TriPanelBC(idrx3,     # idrx matrix
+                               "r",       # mode (diff/rate)
+                               10,        # panel placement coordinate x
+                               3,         # panel placement coordinate y
+                               1000,      # number of bootstrap replications
+                               "all",     # 'mode' as "medians","all","mixed"
+                               2,         # circle size for points (1.5 or 2)
+                               "normal")  # 'equation' position 
+                                 
+```
+
 

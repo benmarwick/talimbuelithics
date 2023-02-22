@@ -362,6 +362,7 @@ t_vert_dist %>%
 
 ```
 
+#--------------- 
 # Dividing the lithic sequence up for rate of evolution analysis
 
 I want to divide the lithic sequence into phases to analyse the rate of evolutionary change in each phase. In our paper we have three depositional events (https://www.cambridge.org/core/journals/antiquity/article/patterned-and-plain-baked-clay-from-prepottery-contexts-in-southeast-sulawesi-indonesia/3BED60E9EE9427143D23004361599427):  4100-4500, 6500-7500, 9500-9900 Here's how they look on the density plot: 
